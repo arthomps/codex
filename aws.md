@@ -51,33 +51,46 @@ credentials and resources needed.
   The first thing you're going to need is a combination **Access Key ID** /
   **Secret Key ID**.  These are generated (for IAM users) via the IAM dashboard.
 
-  To help keep things isolated, we're going to set up a brand new IAM user.  It's
-  a good idea to name this user something like `cf` so that no one tries to
-  re-purpose it later, and so that it doesn't get deleted.
+  To help keep things isolated, we're going to set up a brand new IAM user
 
 1. On the AWS web console, access the IAM service, and click on `Users` in the
-sidebar.  Then create a new user and select "Generate an access key for each user".
+   sidebar.  Then create a new user, and give it a name something like `cf` so
+   that no one tries to re-purpose it or delete it later.  Under the **Select
+   AWS access type**, select 'Programatic access' to generate the **access
+   key ID** and **secret access key**. Once done, click the `Next:
+   Permissions`
+   button.
 
-  **NOTE**: **Make sure you save the secret key somewhere secure**, like 1Password
-  or a Vault instance.  Amazon will be unable to give you the **Secret Key ID**
-  if you misplace it -- your only recourse at that point is to generate a new
-  set of keys and start over.
+2. Click on the box labeled "Attach existing policies directly", filter on
+   "Policy type", and search for `PowerUserAccess`. This policy will allow the
+   user to be able to do any operation except IAM operations. Check the
+   checkbox to add the policy, click `Next: Review`.
 
-2. Next, find the `cf` user and click on the username. This should bring up a
-summary of the user with things like the _User ARN_, _Groups_, etc.  In the
-bottom half of the Summary panel, you can see some tabs, and one of those tabs
-is _Permissions_.  Click on that one.
+3. On the Review page, verify the username, access type and permissions
+   summary, and click `Create User`.
 
-3. Now assign the **PowerUserAccess** role to your user. This user will be able to
-do any operation except IAM operations.  You can do this by clicking on the
-_Permissions_ tab and then clicking on the _attach policy_ button.
+4. You should get a page with a "(&check;) Success" exclamation on it.  You
+   will also be presented with the secret key ID and secret access key, along
+   with a link to download it as a .csv file.  **Make sure you save the secret
+   key somewhere secure**, like 1Password or a Vault instance.  Amazon will be
+   unable to give you the **Secret Key ID** if you misplace it -- your only
+   recourse at that point is to generate a new set of keys and start over.
+   Once downloaded and saved, click on the `Close` button
 
-4. We will also need to create a custom user policy in order to create ELBs with
-SSL listeners. At the same _Permissions_ tab, expand the _Inline Policies_ and
-then create one using the _Custom Policy_ editor. Name it `ServerCertificates`
-and paste the following content:
+5. We will also need to create a custom user policy in order to create ELBs with
+SSL listeners.
 
-    ```
+   1. Click on the user you just created, then click on the "Permissions" tab
+      (if not already selected).  
+
+   1. At the bottom of the Permissions table, click on the `(+) Add inline
+      policy` link.
+
+   1. Select the radio button for Custom Policy and click on the `Select` button.
+   
+   1. Create a new policy named `ServerCertificates` and paste the following content:
+
+   ```
     {
         "Version": "2012-10-17",
         "Statement": [
@@ -93,19 +106,23 @@ and paste the following content:
             }
         ]
     }
-    ```
+   ```
 
-5. Click on _Apply Policy_ and you will be all set.
+   5. Click on _Apply Policy_ and you will be all set.
 
 ### Name Your VPC
 
-This step is really simple -- just make one up.  The VPC name will be used to
-prefix certain things that Terraform creates in the AWS Virtual Private Cloud.
-When managing multiple VPC's this can help you to sub-select only the ones you're
-concerned about.
+Terreform, the tool for provisioning the initial setup, will do the heavy
+lifting on this; all you have to do is come up with a name.  In fact, you
+don't even have to do that yet, but we wanted to discuss how it will be used
+before we get into all the Terreform details.
+
+This VPC name will be used to prefix certain things that Terraform creates in
+the AWS Virtual Private Cloud.  When managing multiple VPC's this can help you
+to sub-select only the ones you're concerned about.
 
 The VPC is configured in Terraform using the `aws_vpc_name` variable in the
-`aws.tfvars` file we're going to create soon.
+`aws.tfvars` file we're going to create soon.  For example, you could use:
 
 ```
 aws_vpc_name = "snw"
@@ -128,28 +145,41 @@ to create an **EC2 Key Pair**.  This will be used as we bring up the initial NAT
 and bastion host instances. And is the SSH key you'll use to connect from your
 local machine to the bastion.
 
-**NOTE**: Make sure you are in the correct region (top-right corner of the black
-menu bar) when you create your **EC2 Key Pair**. Otherwise, it just plain won't
-work. The region name setting can be found in `aws.tf` and the mapping to the
-region in the menu bar can be found on [Amazon Region Doc][amazon-region-doc].
+1. Starting from the main Amazon Web Console, go to Service > EC2.
 
-1. Starting from the main Amazon Web Console, go to Service > EC2, and then click
-the _Key Pairs_ link under _Network & Security_. Look for the big blue
-`Create Key Pair` button.
+2. On the top menu bar on the right side, between your AWS User ID and
+   `Support` links, there will be a dropdown to select what region you want to
+   use.  You will need to know the region ID for the selected region, which
+   should be shown in your browsers address bar, or can be found on [Amazon
+   Region Doc][amazon-region-doc].  Note that the EC2 Key Pairs are for a
+   single region, so if you don't use the right region, it simply won't
+   work.  By default, it uses the us-west-2 (Oregon) region.
 
-2. This downloads a file matching the name of your **EC2 Key Pair**.  Example,
-a key pair named cf-deploy would produce a file named `cf-deploy.pem` and be saved
-to your Downloads folder.  Also `chmod 0600` the `*.pem` file.
+3. Once you're in the desired region, click on the `Key Pairs` link under the
+   `[-] NETWORK & SECURITY` heading on the left-side menu.  Look for the big
+   blue **Create Key Pair** button and click it.
 
-3. Decide where you want this file to be.  All `*.pem` files are ignored in the
-codex repository.  So you can either move this file to the same folder as
-`CODEX_ROOT/terraform/aws` or move it to a place you keep SSH keys and use the
-full path to the `*.pem` file in your `aws.tfvars` for the `aws_key_file`
-variable name.
+4. You will be prompted to name your key pair; any name is fine, but you'll
+   want to name it something meaningful so it doesn't get accidentally deleted
+   in the future because you forgot what it was for.  
+   
+5. Once you enter a name, the key pair will be created, and a PEM file with
+   the specified name will be downloaded to your Download folder . Set the
+   permissions from the command line using `chmod 0600 path/to/name.pem`.
+   
+6. Move the file to an safe appropriate location.  We recommend moving it to
+   your `.ssh` directory, and use absolute path to it in your aws.tfvars file.
+   e.g.: *(for Mac OSX)*
+   ```
+   aws_key_file = /Users/&lt;username>/.ssh/cf-deploy.pem
+   ```
+   NOTE: All `*.pem` files are ignored in the codex repository, so you can
+   move this file to the same folder as `CODEX_ROOT/terraform/aws` to allow
+   you to use relative paths to the pem in your aws.tfvars file.  However, as
+   this does contain secret keys, it is **HIGHLY** recommended that it not be
+   checked into a repository, so ensure you add terraform/aws/\*.pem to your
+   .gitignore file.
 
-```
-aws_key_file = /Users/<username>/.ssh/cf-deploy.pem
-```
 
 ## Use Terraform
 
@@ -172,7 +202,7 @@ aws_access_key = "..."
 aws_secret_key = "..."
 aws_vpc_name   = "snw"
 aws_key_name   = "cf-deploy"
-aws_key_file   = "/Users/<username/.ssh/cf-deploy.pem"
+aws_key_file   = "/Users/&lt;username>/.ssh/cf-deploy.pem"
 ```
 
 If you need to change the region or subnet, you can override the defaults
@@ -215,7 +245,7 @@ terraform get -update
 terraform plan -var-file aws.tfvars -out aws.tfplan
 Refreshing Terraform state prior to plan...
 
-<snip>
+&lt;snip>
 
 Plan: 129 to add, 0 to change, 0 to destroy.
 ```
@@ -350,20 +380,19 @@ You should run `jumpbox user` now, as juser:
 ### Setup User
 
 After you've added the user, **be sure you follow up and setup the user** before
-going any further.
-
-Use the `su - juser` command to switch to the user.  And run `jumpbox user`
+going any further. Because you are the `ubuntu` user and not `root`, you'll need
+to use `sudo su - juser` command to switch to the user.  Then, run `jumpbox user`
 to install all dependent packages.
 
 ```
-$ su - juser
+$ sudo su - juser
 $ jumpbox user
 ```
 
 The following warning may show up when you run `jumpbox user`:
 ```
  * WARNING: You have '~/.profile' file, you might want to load it,
-    to do that add the following line to '/home/XJ/.bash_profile':
+    to do that add the following line to '/home/juser/.bash_profile':
 
       source ~/.profile
 ```
@@ -403,12 +432,12 @@ ready to continue.
 ```
 $ jumpbox
 
-<snip>
+&lt;snip>
 
 >> Checking jumpbox installation
 jumpbox installed - jumpbox v49
 ruby installed - ruby 2.2.4p230 (2015-12-16 revision 53155) [x86_64-linux]
-rvm installed - rvm 1.27.0 (latest) by Wayne E. Seguin <wayneeseguin@gmail.com>, Michal Papis <mpapis@gmail.com> [https://rvm.io/]
+rvm installed - rvm 1.27.0 (latest) by Wayne E. Seguin &lt;wayneeseguin@gmail.com>, Michal Papis &lt;mpapis@gmail.com> [https://rvm.io/]
 bosh installed - BOSH 1.3184.1.0
 bosh-init installed - version 0.0.81-775439c-2015-12-09T00:36:03Z
 jq installed - jq-1.5
@@ -425,25 +454,15 @@ git user.email is 'juser@starkandwayne.com'
 
 ![Global Network Diagram][global_network_diagram]
 
-There are three layers to `genesis` templates.
-
-* Global
-* Site
-* Environment
-
-### Site Name
-
-Sometimes the site level name can be a bit tricky because each IaaS divides things
-differently.  With AWS we suggest a default of the AWS Region you're using, for
-example: `us-west-2`.
-
-### Environment Name
-
-All of the software the **proto-BOSH** will deploy will be in the `proto` environment.
-And by this point, you've [Setup Credentials][setup_credentials],
+By this point, you've [Setup Credentials][setup_credentials],
 [Used Terraform][use_terraform] to construct the IaaS components and
 [Configured a Bastion Host][bastion_host].  We're ready now to setup a BOSH
-Director on the bastion.
+Director from the bastion.
+
+The Proto-BOSH (shown above in green) is the primordial BOSH that all further
+environments will be built from, including other BOSHes.  It is found in the
+`proto` environment, along with several other singular global services that will
+be used by all other environments.
 
 The first step is to create a **vault-init** process.
 
@@ -457,9 +476,9 @@ Vault for storing our credentials, so that we don't have them on-disk or in a
 git repository somewhere.
 
 However, we are starting from almost nothing, so we don't have the luxury of
-using a BOSH-deployed Vault.  What we can do, however, is spin a single-threaded
-Vault server instance **on the bastion host**, and then migrate the credentials to
-the real Vault later.
+using a BOSH-deployed Vault.  What we can do, however, is bootstrap a
+single-threaded Vault server instance **on the bastion host**, and then
+migrate the credentials to the real Vault later.
 
 This we call a **vault-init**.  Because it precedes the **proto-BOSH** and Vault
 deploy we'll be setting up later.
@@ -523,7 +542,7 @@ Authenticate with the `Root Token` from the `vault server` output.
 ```
 $ safe auth token
 Authenticating against init at http://127.0.0.1:8200
-Token: <paste your Root Token here>
+Token: &lt;paste your Root Token here>
 ```
 
 #### Test vault-init
@@ -579,11 +598,11 @@ quickly, including:
 When generating a new site we'll use this command format:
 
 ```
-genesis new site --template <name> <site_name>
+genesis new site --template &lt;name> &lt;site_name>
 ```
 
-The template `<name>` will be `aws` because that's our IaaS we're working with and
-we recommend the `<site_name>` default to the AWS Region, ex. `us-west-2`.
+The template `&lt;name>` will be `aws` because that's our IaaS we're working with and
+we recommend the `&lt;site_name>` default to the AWS Region, ex. `us-west-2`.
 
 ```
 $ genesis new site --template aws us-west-2
@@ -754,7 +773,7 @@ on a macOS machine:
 
 ```
 cat ~/.ssh/cf-deploy.pem | pbcopy
-<paste values to /path/to/the/ec2/key.pem>
+&lt;paste values to /path/to/the/ec2/key.pem>
 ```
 
 Then add the following to the `properties.yml` file.
@@ -870,7 +889,7 @@ networks:
         gateway:  10.4.1.1
         dns:     [10.4.0.2]
         cloud_properties:
-          subnet: subnet-xxxxxxxx # <-- your global-infra-0 AWS Subnet ID
+          subnet: subnet-xxxxxxxx # &lt;-- your global-infra-0 AWS Subnet ID
           security_groups: [wide-open]
         reserved:
           - 10.4.1.2 - 10.4.1.3    # Amazon reserves these
@@ -1086,7 +1105,7 @@ networks:
         gateway:  10.4.1.1
         dns:     [10.4.0.2]
         cloud_properties:
-          subnet: subnet-xxxxxxxx  # <--- your global-infra-0 AWS Subnet ID
+          subnet: subnet-xxxxxxxx  # &lt;--- your global-infra-0 AWS Subnet ID
           security_groups: [wide-open]
         reserved:
           - 10.4.1.2 - 10.4.1.3    # Amazon reserves these
@@ -1102,7 +1121,7 @@ networks:
         gateway:  10.4.2.1
         dns:     [10.4.2.2]
         cloud_properties:
-          subnet: subnet-yyyyyyyy  # <--- your global-infra-1 AWS Subnet ID
+          subnet: subnet-yyyyyyyy  # &lt;--- your global-infra-1 AWS Subnet ID
           security_groups: [wide-open]
         reserved:
           - 10.4.2.2 - 10.4.2.3    # Amazon reserves these
@@ -1118,7 +1137,7 @@ networks:
         gateway:  10.4.3.1
         dns:     [10.4.3.2]
         cloud_properties:
-          subnet: subnet-zzzzzzzz  # <--- your global-infra-2 AWS Subnet ID
+          subnet: subnet-zzzzzzzz  # &lt;--- your global-infra-2 AWS Subnet ID
           security_groups: [wide-open]
         reserved:
           - 10.4.3.2 - 10.4.3.3    # Amazon reserves these
@@ -1464,7 +1483,7 @@ networks:
         gateway:  10.4.1.1
         dns:     [10.4.0.2]
         cloud_properties:
-          subnet: subnet-xxxxxxxx  # <--- your global-infra-0 AWS Subnet ID
+          subnet: subnet-xxxxxxxx  # &lt;--- your global-infra-0 AWS Subnet ID
           security_groups: [wide-open]
         reserved:
           - 10.4.1.2 - 10.4.1.3    # Amazon reserves these
@@ -1495,7 +1514,7 @@ properties:
       config:
         access_key_id: (( vault "secret/us-west-2:access_key" ))
         secret_access_key: (( vault "secret/us-west-2:secret_key" ))
-        bucket: xxxxxx # <- backup's s3 bucket
+        bucket: xxxxxx # &lt;- backup's s3 bucket
         prefix: "/"
     schedule:
       name: "default"
@@ -1669,7 +1688,11 @@ networks:
    - range: 10.4.1.0/24
      gateway: 10.4.1.1
      cloud_properties:
+<<<<<<< Updated upstream
        subnet: subnet-xxxxxxxx #<--- your global-infra-0 AWS Subnet ID
+=======
+       subnet: subnet-xxxxxxxx #&lt;--- your AWS Subnet ID
+>>>>>>> Stashed changes
        security_groups: [wide-open]
      dns: [10.4.0.2]
      reserved:
@@ -1711,7 +1734,7 @@ will be able to visit the Gnossis web interface for bolo.
 If you do not want to use ngrok, you can simply use your local built-in SSH client as follows:
 
 ```
-ssh bastion -L 4040:<ip address of your bolo server>:80 -N
+ssh bastion -L 4040:&lt;ip address of your bolo server>:80 -N
 ```
 
 Then, go to http://127.0.0.1:4040 in your web browser.
@@ -1918,7 +1941,11 @@ networks:
           - 10.4.1.4 - 10.4.1.47   # Allocated to other deployments
           - 10.4.1.65 - 10.4.1.254 # Allocated to other deployments
         cloud_properties:
+<<<<<<< Updated upstream
           subnet: subnet-nnnnnnnn # <-- your global-infra-0 AWS Subnet ID
+=======
+          subnet: subnet-nnnnnnnn # &lt;-- your AWS Subnet ID
+>>>>>>> Stashed changes
           security_groups: [wide-open]
 EOF
 ```
@@ -1956,10 +1983,10 @@ Date: Thu, 07 Jul 2016 04:50:05 GMT
 Content-Type: text/html; charset=utf-8
 Transfer-Encoding: chunked
 
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <title>Concourse</title>
+&lt;!DOCTYPE html>
+&lt;html lang="en">
+  &lt;head>
+    &lt;title>Concourse&lt;/title>
 ```
 
 You can then run on a your local machine
@@ -2118,7 +2145,7 @@ $ cat > networking.yml <<EOF
 ---
 meta:
   net:
-    subnet: subnet-xxxxx # <--- your subnet ID here
+    subnet: subnet-xxxxx # &lt;--- your subnet ID here
     security_groups: [wide-open]
     range: 10.4.1.0/24
     gateway: 10.4.1.1
@@ -2135,7 +2162,7 @@ $ cat > networking.yml <<EOF
 ---
 meta:
   net:
-    subnet: subnet-xxxxx # <--- your subnet ID here
+    subnet: subnet-xxxxx # &lt;--- your subnet ID here
     security_groups: [wide-open]
     range: 10.4.1.0/24
     gateway: 10.4.1.1
@@ -2213,7 +2240,7 @@ Deployed `us-west-2-alpha-bosh-lite' to `us-west-2-proto-bosh'
 ```
 
 
-**NOTE**: If deploying a bosh-release (BOSH in this case) fails from the proto-BOSH to a child environment (different subnet), you might be having [this issue](https://github.com/starkandwayne/codex/issues/64) with a too strict AWS Network ACL (`<vpc name>-hardened`). BOSH will fail with errors such as: `Error 450002: Timed out pinging to ... after 600 seconds`.
+**NOTE**: If deploying a bosh-release (BOSH in this case) fails from the proto-BOSH to a child environment (different subnet), you might be having [this issue](https://github.com/starkandwayne/codex/issues/64) with a too strict AWS Network ACL (`&lt;vpc name>-hardened`). BOSH will fail with errors such as: `Error 450002: Timed out pinging to ... after 600 seconds`.
 
 Now we can verify the deployment and set up our `bosh` CLI target:
 
@@ -2504,7 +2531,7 @@ make: *** [deploy] Error 3
 Looks like we need to provide the same type of data as we did for **proto-BOSH**. Lets fill in the basic properties:
 
 ```
-$ cat > properties.yml <<EOF
+$ cat > properties.yml &lt;&lt;EOF
 ---
 meta:
   aws:
@@ -2540,7 +2567,7 @@ make: *** [deploy] Error 3
 All that remains is filling in our networking details, so lets go consult our [Network Plan](https://github.com/starkandwayne/codex/blob/master/network.md). We will place the BOSH Director in the staging site's infrastructure network, in the first AZ we have defined (subnet name `staging-infra-0`, CIDR `10.4.32.0/24`). To do that, we'll need to update `networking.yml`:
 
 ```
-$ cat > networking.yml <<EOF
+$ cat > networking.yml &lt;&lt;EOF
 ---
 networks:
   - name: default
@@ -2549,7 +2576,7 @@ networks:
         gateway:  10.4.32.1
         dns:     [10.4.0.2]
         cloud_properties:
-          subnet: subnet-xxxxxxxx # <-- the AWS Subnet ID for your staging-infra-0 network
+          subnet: subnet-xxxxxxxx # &lt;-- the AWS Subnet ID for your staging-infra-0 network
           security_groups: [wide-open]
         reserved:
           - 10.4.32.2 - 10.4.32.3    # Amazon reserves these
@@ -2588,7 +2615,7 @@ resource_pools:
     instance_type: m3.xlarge
   env:
     bosh:
-      password: "<redacted>"
+      password: "&lt;redacted>"
   name: bosh
   network: default
   stemcell:
@@ -2828,7 +2855,7 @@ Now let's go back to the `terraform/aws` sub-directory of this repository and ad
 
 ```
 aws_rds_staging_enabled = "1"
-aws_rds_staging_master_password = "<insert the generated RDS password>"
+aws_rds_staging_master_password = "&lt;insert the generated RDS password>"
 ```
 
 As a quick pre-flight check, run `make manifest` to compile your Terraform plan, a RDS Cluster and 3 RDS Instances should be created:
@@ -2885,19 +2912,19 @@ meta:
         aws_secret_access_key: (( vault "secret/us-west-2:secret_key" ))
         region: us-east-1
     ccdb:
-      host: "xxxxxx.rds.amazonaws.com" # <- your RDS Instance endpoint
+      host: "xxxxxx.rds.amazonaws.com" # &lt;- your RDS Instance endpoint
       user: "cfdbadmin"
       pass: (( vault "secret/us-west-2/staging/cf/rds:password" ))
       scheme: postgres
       port: 5432
     uaadb:
-      host: "xxxxxx.rds.amazonaws.com" # <- your RDS Instance endpoint
+      host: "xxxxxx.rds.amazonaws.com" # &lt;- your RDS Instance endpoint
       user: "cfdbadmin"
       pass: (( vault "secret/us-west-2/staging/cf/rds:password" ))
       scheme: postgresql
       port: 5432
     diegodb:
-      host: "xxxxxx.rds.amazonaws.com" # <- your RDS Instance endpoint
+      host: "xxxxxx.rds.amazonaws.com" # &lt;- your RDS Instance endpoint
       user: "cfdbadmin"
       pass: (( vault "secret/us-west-2/staging/cf/rds:password" ))
       scheme: postgres
@@ -2933,21 +2960,21 @@ Created out/CertAuth.crl
 Then create the certificates for your domain:
 
 ```
-$ certstrap request-cert -common-name *.staging.<your domain> -domain *.system.staging.<your domain>,*.run.staging.<your domain>,*.login.staging.<your domain>,*.uaa.staging.<your domain>
+$ certstrap request-cert -common-name *.staging.&lt;your domain> -domain *.system.staging.&lt;your domain>,*.run.staging.&lt;your domain>,*.login.staging.&lt;your domain>,*.uaa.staging.&lt;your domain>
 
 Enter passphrase (empty for no passphrase):
 
 Enter same passphrase again:
 
-Created out/*.staging.<your domain>.key
-Created out/*.staging.<your domain>.csr
+Created out/*.staging.&lt;your domain>.key
+Created out/*.staging.&lt;your domain>.csr
 ```
 
 And last, sign the domain certificates with the CA certificate:
 
 ```
-$ certstrap sign *.staging.<your domain> --CA CertAuth
-Created out/*.staging.<your domain>.crt from out/*.staging.<your domain>.csr signed by out/CertAuth.key
+$ certstrap sign *.staging.&lt;your domain> --CA CertAuth
+Created out/*.staging.&lt;your domain>.crt from out/*.staging.&lt;your domain>.csr signed by out/CertAuth.key
 ```
 
 For safety, let's store the certificates in Vault:
@@ -2957,9 +2984,9 @@ $ cd out
 $ safe write secret/us-west-2/staging/cf/tls/ca "csr@CertAuth.crl"
 $ safe write secret/us-west-2/staging/cf/tls/ca "crt@CertAuth.crt"
 $ safe write secret/us-west-2/staging/cf/tls/ca "key@CertAuth.key"
-$ safe write secret/us-west-2/staging/cf/tls/domain "crt@*.staging.<your domain>.crt"
-$ safe write secret/us-west-2/staging/cf/tls/domain "csr@*.staging.<your domain>.csr"
-$ safe write secret/us-west-2/staging/cf/tls/domain "key@*.staging.<your domain>.key"
+$ safe write secret/us-west-2/staging/cf/tls/domain "crt@*.staging.&lt;your domain>.crt"
+$ safe write secret/us-west-2/staging/cf/tls/domain "csr@*.staging.&lt;your domain>.csr"
+$ safe write secret/us-west-2/staging/cf/tls/domain "key@*.staging.&lt;your domain>.key"
 ```
 
 Now let's go back to the `terraform/aws` sub-directory of this repository and add to the `aws.tfvars` file the following configurations:
@@ -2996,7 +3023,7 @@ Lastly, let's make sure to add our Cloud Foundry domain to properties.yml:
 meta:
   skip_ssl_validation: true
   cf:
-    base_domain: staging.<your domain> # <- Your CF domain
+    base_domain: staging.&lt;your domain> # &lt;- Your CF domain
     ...
 ```
 
@@ -3074,8 +3101,8 @@ meta:
     z2: us-west-2b
     z3: us-west-2c
   dns: [10.4.0.2]
-  elbs: [xxxxxx-staging-cf-elb] # <- ELB name
-  ssh_elbs: [xxxxxx-staging-cf-ssh-elb] # <- SSH ELB name
+  elbs: [xxxxxx-staging-cf-elb] # &lt;- ELB name
+  ssh_elbs: [xxxxxx-staging-cf-ssh-elb] # &lt;- SSH ELB name
   router_security_groups: [wide-open]
   security_groups: [wide-open]
 EOF
@@ -3092,8 +3119,8 @@ meta:
     z2: us-west-2b
     z3: us-west-2c
   dns: [10.4.0.2]
-  elbs: [xxxxxx-staging-cf-elb] # <- ELB name
-  ssh_elbs: [xxxxxx-staging-cf-ssh-elb] # <- SSH ELB name
+  elbs: [xxxxxx-staging-cf-elb] # &lt;- ELB name
+  ssh_elbs: [xxxxxx-staging-cf-ssh-elb] # &lt;- SSH ELB name
   router_security_groups: [wide-open]
   security_groups: [wide-open]
 
@@ -3105,7 +3132,11 @@ networks:
     reserved: [10.4.35.2 - 10.4.35.3] # amazon reserves these
     gateway: 10.4.35.1
     cloud_properties:
+<<<<<<< Updated upstream
       subnet: subnet-XXXXXX # <--- your staging-cf-edge-0 subnet ID here
+=======
+      subnet: subnet-XXXXXX # &lt;--- your subnet ID here
+>>>>>>> Stashed changes
 - name: router2
   subnets:
   - range: 10.4.35.128/25
@@ -3113,7 +3144,11 @@ networks:
     reserved: [10.4.35.130 - 10.4.35.131] # amazon reserves these
     gateway: 10.4.35.129
     cloud_properties:
+<<<<<<< Updated upstream
       subnet: subnet-XXXXXX # <--- your staging-cf-edge-1 subnet ID here
+=======
+      subnet: subnet-XXXXXX # &lt;--- your subnet ID here
+>>>>>>> Stashed changes
 - name: cf1
   subnets:
   - range: 10.4.36.0/24
@@ -3121,7 +3156,11 @@ networks:
     reserved: [10.4.36.2 - 10.4.36.3] # amazon reserves these
     gateway: 10.4.36.1
     cloud_properties:
+<<<<<<< Updated upstream
       subnet: subnet-XXXXXX # <--- your staging-cf-core-0 subnet ID here
+=======
+      subnet: subnet-XXXXXX # &lt;--- your subnet ID here
+>>>>>>> Stashed changes
 - name: cf2
   subnets:
   - range: 10.4.37.0/24
@@ -3129,7 +3168,11 @@ networks:
     reserved: [10.4.37.2 - 10.4.37.3] # amazon reserves these
     gateway: 10.4.37.1
     cloud_properties:
+<<<<<<< Updated upstream
       subnet: subnet-XXXXXX # <--- your staging-cf-core-1 subnet ID here
+=======
+      subnet: subnet-XXXXXX # &lt;--- your subnet ID here
+>>>>>>> Stashed changes
 - name: cf3
   subnets:
   - range: 10.4.38.0/24
@@ -3137,7 +3180,11 @@ networks:
     reserved: [10.4.38.2 - 10.4.38.3] # amazon reserves these
     gateway: 10.4.38.1
     cloud_properties:
+<<<<<<< Updated upstream
       subnet: subnet-XXXXXX # <--- your staging-cf-core-2 subnet ID here
+=======
+      subnet: subnet-XXXXXX # &lt;--- your subnet ID here
+>>>>>>> Stashed changes
 - name: runner1
   subnets:
   - range: 10.4.39.0/24
@@ -3145,7 +3192,11 @@ networks:
     reserved: [10.4.39.2 - 10.4.39.3] # amazon reserves these
     gateway: 10.4.39.1
     cloud_properties:
+<<<<<<< Updated upstream
       subnet: subnet-XXXXXX # <--- your staging-cf-runtime-0 subnet ID here
+=======
+      subnet: subnet-XXXXXX # &lt;--- your subnet ID here
+>>>>>>> Stashed changes
 - name: runner2
   subnets:
   - range: 10.4.40.0/24
@@ -3153,7 +3204,11 @@ networks:
     reserved: [10.4.40.2 - 10.4.40.3] # amazon reserves these
     gateway: 10.4.40.1
     cloud_properties:
+<<<<<<< Updated upstream
       subnet: subnet-XXXXXX # <--- your staging-cf-runtime-1 subnet ID here
+=======
+      subnet: subnet-XXXXXX # &lt;--- your subnet ID here
+>>>>>>> Stashed changes
 - name: runner3
   subnets:
   - range: 10.4.41.0/24
@@ -3161,8 +3216,12 @@ networks:
     reserved: [10.4.41.2 - 10.4.41.3] # amazon reserves these
     gateway: 10.4.41.1
     cloud_properties:
+<<<<<<< Updated upstream
       subnet: subnet-XXXXXX # <--- your prod-cf-runtime-2 subnet ID here
 EOF
+=======
+      subnet: subnet-XXXXXX # &lt;--- your subnet ID here
+>>>>>>> Stashed changes
 ```
 
 Let's see what's left now:
@@ -3186,8 +3245,8 @@ meta:
     z2: us-west-2b
     z3: us-west-2c
   dns: [10.4.0.2]
-  elbs: [xxxxxx-staging-cf-elb] # <- ELB name
-  ssh_elbs: [xxxxxx-staging-cf-ssh-elb] # <- SSH ELB name
+  elbs: [xxxxxx-staging-cf-elb] # &lt;- ELB name
+  ssh_elbs: [xxxxxx-staging-cf-ssh-elb] # &lt;- SSH ELB name
   router_security_groups: [wide-open]
   security_groups: [wide-open]
 
@@ -3199,7 +3258,11 @@ networks:
     reserved: [10.4.35.2 - 10.4.35.3] # amazon reserves these
     gateway: 10.4.35.1
     cloud_properties:
+<<<<<<< Updated upstream
       subnet: subnet-XXXXXX # <--- your staging-cf-edge-0 subnet ID here
+=======
+      subnet: subnet-XXXXXX # &lt;--- your subnet ID here
+>>>>>>> Stashed changes
 - name: router2
   subnets:
   - range: 10.4.35.128/25
@@ -3207,7 +3270,11 @@ networks:
     reserved: [10.4.35.130 - 10.4.35.131] # amazon reserves these
     gateway: 10.4.35.129
     cloud_properties:
+<<<<<<< Updated upstream
       subnet: subnet-XXXXXX # <--- your staging-cf-edge-1 subnet ID here
+=======
+      subnet: subnet-XXXXXX # &lt;--- your subnet ID here
+>>>>>>> Stashed changes
 - name: cf1
   subnets:
   - range: 10.4.36.0/24
@@ -3215,7 +3282,11 @@ networks:
     reserved: [10.4.36.2 - 10.4.36.3] # amazon reserves these
     gateway: 10.4.36.1
     cloud_properties:
+<<<<<<< Updated upstream
       subnet: subnet-XXXXXX # <--- your staging-cf-core-0 subnet ID here
+=======
+      subnet: subnet-XXXXXX # &lt;--- your subnet ID here
+>>>>>>> Stashed changes
 - name: cf2
   subnets:
   - range: 10.4.37.0/24
@@ -3223,7 +3294,11 @@ networks:
     reserved: [10.4.37.2 - 10.4.37.3] # amazon reserves these
     gateway: 10.4.37.1
     cloud_properties:
+<<<<<<< Updated upstream
       subnet: subnet-XXXXXX # <--- your staging-cf-core-1 subnet ID here
+=======
+      subnet: subnet-XXXXXX # &lt;--- your subnet ID here
+>>>>>>> Stashed changes
 - name: cf3
   subnets:
   - range: 10.4.38.0/24
@@ -3231,7 +3306,11 @@ networks:
     reserved: [10.4.38.2 - 10.4.38.3] # amazon reserves these
     gateway: 10.4.38.1
     cloud_properties:
+<<<<<<< Updated upstream
       subnet: subnet-XXXXXX # <--- your staging-cf-core-2 subnet ID here
+=======
+      subnet: subnet-XXXXXX # &lt;--- your subnet ID here
+>>>>>>> Stashed changes
 - name: runner1
   subnets:
   - range: 10.4.39.0/24
@@ -3239,7 +3318,11 @@ networks:
     reserved: [10.4.39.2 - 10.4.39.3] # amazon reserves these
     gateway: 10.4.39.1
     cloud_properties:
+<<<<<<< Updated upstream
       subnet: subnet-XXXXXX # <--- your staging-cf-runtime-0 subnet ID here
+=======
+      subnet: subnet-XXXXXX # &lt;--- your subnet ID here
+>>>>>>> Stashed changes
 - name: runner2
   subnets:
   - range: 10.4.40.0/24
@@ -3247,7 +3330,11 @@ networks:
     reserved: [10.4.40.2 - 10.4.40.3] # amazon reserves these
     gateway: 10.4.40.1
     cloud_properties:
+<<<<<<< Updated upstream
       subnet: subnet-XXXXXX # <--- your staging-cf-runtime-1 subnet ID here
+=======
+      subnet: subnet-XXXXXX # &lt;--- your subnet ID here
+>>>>>>> Stashed changes
 - name: runner3
   subnets:
   - range: 10.4.41.0/24
@@ -3255,7 +3342,11 @@ networks:
     reserved: [10.4.41.2 - 10.4.41.3] # amazon reserves these
     gateway: 10.4.41.1
     cloud_properties:
+<<<<<<< Updated upstream
       subnet: subnet-XXXXXX # <--- your staging-cf-runtime-2 subnet ID here
+=======
+      subnet: subnet-XXXXXX # &lt;--- your subnet ID here
+>>>>>>> Stashed changes
 
 properties:
   cc:
@@ -3328,7 +3419,7 @@ jobs:
 
 After a long while of compiling and deploying VMs, your CF should now be up, and accessible! You can
 check the sanity of the deployment via `genesis bosh run errand smoke_tests`. Target it using
-`cf login -a https://api.system.<your CF domain>`. The admin user's password can be retrieved
+`cf login -a https://api.system.&lt;your CF domain>`. The admin user's password can be retrieved
 from Vault. If you run into any trouble, make sure that your DNS is pointing properly to the
 correct ELB for this environment, and that the ELB has the correct SSL certificate for your site.
 
